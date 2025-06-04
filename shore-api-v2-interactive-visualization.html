@@ -1,0 +1,1443 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Shore API v2 Database Visualization</title>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: #f8f9fa;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            padding: 30px;
+        }
+
+        h1 {
+            color: #2c3e50;
+            text-align: center;
+            margin-bottom: 30px;
+            font-size: 2.5em;
+        }
+
+        .controls {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .controls button {
+            background: #3498db;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            margin: 0 5px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background 0.3s;
+        }
+
+        .controls button:hover {
+            background: #2980b9;
+        }
+        #graph-view{
+            display: flex;
+            flex-direction: column;
+        }
+        .controls button.active {
+            background: #e74c3c;
+        }
+
+        #visualization {
+            border: 2px solid #ecf0f1;
+            border-radius: 8px;
+            background: #fdfdfd;
+            align-self: center;
+        }
+
+        .node {
+            cursor: pointer;
+        }
+
+        .node-circle {
+            stroke: #fff;
+            stroke-width: 2px;
+            transition: all 0.2s ease;
+        }
+
+        /* Debug: Add hover effect to help identify individual nodes */
+        .node:hover .node-circle {
+            stroke: #ff6b6b;
+            stroke-width: 4px;
+            filter: drop-shadow(0 0 8px rgba(255, 107, 107, 0.6));
+        }
+
+        .node-text {
+            font-size: 11px;
+            font-weight: 600;
+            text-anchor: middle;
+            fill: white;
+            pointer-events: none;
+        }
+
+        .link {
+            stroke: #7f8c8d;
+            stroke-opacity: 0.6;
+            stroke-width: 2px;
+            transition: all 0.3s ease;
+        }
+
+        .link.highlighted {
+            stroke: #e74c3c;
+            stroke-opacity: 1;
+            stroke-width: 3px;
+        }
+
+        .node.highlighted .node-circle {
+            stroke: #e74c3c;
+            stroke-width: 4px;
+        }
+
+        .legend {
+            margin-top: 20px;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            padding: 8px;
+            background: #f8f9fa;
+            border-radius: 6px;
+        }
+
+        .legend-color {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            margin-right: 10px;
+            border: 2px solid white;
+        }
+
+        .entity-info {
+            position: absolute;
+            background: rgba(44, 62, 80, 0.95);
+            color: white;
+            padding: 15px;
+            border-radius: 8px;
+            font-size: 14px;
+            max-width: 300px;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.3s;
+            z-index: 1000;
+        }
+
+        .entity-info h3 {
+            margin: 0 0 10px 0;
+            color: #3498db;
+        }
+
+        .stats {
+            margin-top: 30px;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+        }
+
+        .stat-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 10px;
+            text-align: center;
+        }
+
+        .stat-number {
+            font-size: 2em;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+
+        .stat-label {
+            font-size: 0.9em;
+            opacity: 0.9;
+        }
+
+        .view-toggle {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        .view-toggle button {
+            background: #34495e;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            margin: 0 5px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background 0.3s;
+        }
+
+        .view-toggle button:hover {
+            background: #2c3e50;
+        }
+
+        .view-toggle button.active {
+            background: #e74c3c;
+        }
+
+        .table-view {
+            margin-top: 30px;
+            display: none;
+        }
+
+        .table-view.active {
+            display: block;
+        }
+
+        .entity-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 30px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        .entity-table th {
+            background: #34495e;
+            color: white;
+            padding: 15px;
+            text-align: left;
+            font-weight: 600;
+        }
+
+        .entity-table td {
+            padding: 12px 15px;
+            border-bottom: 1px solid #ecf0f1;
+        }
+
+        .entity-table tr:nth-child(even) {
+            background: #f8f9fa;
+        }
+
+        .entity-table tr:hover {
+            background: #e8f4fd;
+        }
+
+        .entity-type-badge {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: 500;
+            color: white;
+        }
+
+        .relationship-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 30px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        .relationship-table th {
+            background: #2c3e50;
+            color: white;
+            padding: 15px;
+            text-align: left;
+            font-weight: 600;
+        }
+
+        .relationship-table td {
+            padding: 12px 15px;
+            border-bottom: 1px solid #ecf0f1;
+        }
+
+        .relationship-table tr:nth-child(even) {
+            background: #f8f9fa;
+        }
+
+        .relationship-table tr:hover {
+            background: #e8f4fd;
+        }
+
+        .attributes-section {
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 15px;
+            margin-top: 20px;
+        }
+
+        .attributes-toggle {
+            cursor: pointer;
+            background: #3498db;
+            color: white;
+            padding: 8px 15px;
+            border-radius: 5px;
+            border: none;
+            font-size: 12px;
+            margin-top: 10px;
+        }
+
+        .attributes-toggle:hover {
+            background: #2980b9;
+        }
+
+        .attributes-content {
+            display: none;
+            margin-top: 10px;
+            padding: 10px;
+            background: white;
+            border-radius: 5px;
+            border-left: 4px solid #3498db;
+        }
+
+        .attributes-content.show {
+            display: block;
+        }
+
+        .attribute-item {
+            margin: 5px 0;
+            font-size: 13px;
+        }
+
+        .attribute-name {
+            font-weight: 600;
+            color: #2c3e50;
+        }
+
+        .attribute-type {
+            color: #7f8c8d;
+            font-style: italic;
+        }
+
+        .entity-detail-modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.7);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 2000;
+        }
+
+        .modal-content {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            max-width: 800px;
+            max-height: 80vh;
+            overflow-y: auto;
+            position: relative;
+        }
+
+        .modal-close {
+            position: absolute;
+            top: 15px;
+            right: 20px;
+            background: none;
+            border: none;
+            font-size: 24px;
+            cursor: pointer;
+            color: #7f8c8d;
+        }
+
+        .modal-close:hover {
+            color: #e74c3c;
+        }
+
+        .attribute-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 15px;
+            margin-top: 20px;
+        }
+
+        .attribute-card {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            border-left: 4px solid #3498db;
+        }
+
+        .attribute-card h4 {
+            margin: 0 0 10px 0;
+            color: #2c3e50;
+        }
+
+        .attribute-type-badge {
+            background: #ecf0f1;
+            color: #7f8c8d;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-size: 11px;
+            font-weight: normal;
+        }
+
+        .relationship-item {
+            display: flex;
+            align-items: center;
+            padding: 8px;
+            background: white;
+            border-radius: 4px;
+            margin: 5px 0;
+            border-left: 3px solid #3498db;
+        }
+
+        .relationship-arrow {
+            color: #7f8c8d;
+            margin: 0 8px;
+            font-weight: bold;
+        }
+
+        .click-hint {
+            position: absolute;
+            bottom: 10px;
+            right: 15px;
+            background: rgba(52, 152, 219, 0.9);
+            color: white;
+            padding: 5px 10px;
+            border-radius: 15px;
+            font-size: 11px;
+            opacity: 0;
+            transition: opacity 0.3s;
+            pointer-events: none;
+        }
+
+        .node:hover .click-hint {
+            opacity: 1;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <h1>🗄️ Shore API v2 Database Visualization</h1>
+
+        <div class="view-toggle">
+            <button id="graphViewBtn" class="active">Graph View</button>
+            <button id="tableViewBtn">Table View</button>
+        </div>
+
+        <div id="graph-view">
+            <div class="controls">
+                <button id="resetBtn">Reset View</button>
+                <button id="coreBtn">Core Entities</button>
+                <button id="financialBtn">Financial Flow</button>
+                <button id="bookingBtn">Booking Flow</button>
+            </div>
+
+            <div style="text-align: center; margin-bottom: 15px; color: #7f8c8d; font-size: 14px;">
+                💡 <strong>Tip:</strong> Hover over entities to see relationships, click to view detailed attributes
+            </div>
+
+            <svg id="visualization" width="100%" height="600"></svg>
+
+            <div class="entity-info" id="tooltip"></div>
+
+            <div class="legend" id="legend"></div>
+        </div>
+
+        <div id="table-view" class="table-view">
+            <h2>📊 Entity Overview</h2>
+            <div style="text-align: center; margin-bottom: 15px; color: #7f8c8d; font-size: 14px;">
+                💡 <strong>Tip:</strong> Click on any entity row to view detailed attributes and relationships
+            </div>
+            <table class="entity-table" id="entityTable">
+                <thead>
+                    <tr>
+                        <th>Entity</th>
+                        <th>Type</th>
+                        <th>Description</th>
+                        <th>Key Relationships</th>
+                    </tr>
+                </thead>
+                <tbody id="entityTableBody">
+                </tbody>
+            </table>
+
+            <h2>🔗 Relationship Matrix</h2>
+            <table class="relationship-table" id="relationshipTable">
+                <thead>
+                    <tr>
+                        <th>Source Entity</th>
+                        <th>Relationship Type</th>
+                        <th>Target Entity</th>
+                        <th>Business Context</th>
+                    </tr>
+                </thead>
+                <tbody id="relationshipTableBody">
+                </tbody>
+            </table>
+        </div>
+
+        <div class="stats">
+            <div class="stat-card">
+                <div class="stat-number">16</div>
+                <div class="stat-label">Core Entities</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number">25+</div>
+                <div class="stat-label">Relationships</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number">3</div>
+                <div class="stat-label">Hierarchy Levels</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number">5</div>
+                <div class="stat-label">Business Flows</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Entity Detail Modal -->
+    <div id="entityDetailModal" class="entity-detail-modal">
+        <div class="modal-content">
+            <button class="modal-close" onclick="closeEntityModal()">&times;</button>
+            <div id="modalEntityContent">
+                <!-- Entity details will be populated here -->
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Data structure representing the Shore API v2 database with comprehensive attributes
+        const entities = [
+            {
+                id: 'organization',
+                name: 'Organization',
+                type: 'root',
+                color: '#2c3e50',
+                description: 'Top-level entity managing multiple merchants and overall business structure',
+                attributes: [
+                    { name: 'id', type: 'string (UUID)', description: 'Unique identifier' },
+                    { name: 'name', type: 'string', description: 'Organization name' },
+                    { name: 'business_type', type: 'string', description: 'Type of business organization' },
+                    { name: 'created_at', type: 'datetime', description: 'Record creation timestamp' },
+                    { name: 'updated_at', type: 'datetime', description: 'Last update timestamp' }
+                ]
+            },
+            {
+                id: 'merchant',
+                name: 'Merchant',
+                type: 'core',
+                color: '#3498db',
+                description: 'Individual business location with services, customers, and operations',
+                attributes: [
+                    { name: 'id', type: 'string (UUID)', description: 'Unique identifier' },
+                    { name: 'name', type: 'string', description: 'Business name' },
+                    { name: 'slug', type: 'string', description: 'URL-friendly identifier' },
+                    { name: 'address', type: 'object', description: 'Business address with country, line1, city, state, postal_code' },
+                    { name: 'phone', type: 'string', description: 'Business phone number' },
+                    { name: 'locale', type: 'string', description: 'Language/locale setting' },
+                    { name: 'time_zone', type: 'string', description: 'Business timezone' },
+                    { name: 'opening_hours', type: 'object', description: 'Daily opening hours schedule' },
+                    { name: 'booking_hours', type: 'object', description: 'Available booking time slots' },
+                    { name: 'currency', type: 'string', description: 'Primary currency (EUR, USD, etc.)' },
+                    { name: 'website', type: 'string', description: 'Business website URL' },
+                    { name: 'description', type: 'text', description: 'Business description and marketing text' },
+                    { name: 'social_media_links', type: 'object', description: 'Facebook, Instagram, Twitter links' },
+                    { name: 'max_lead_time', type: 'integer', description: 'Maximum booking advance time (minutes)' },
+                    { name: 'min_lead_time', type: 'integer', description: 'Minimum booking advance time (minutes)' },
+                    { name: 'suspended', type: 'boolean', description: 'Account suspension status' },
+                    { name: 'location_logo_url', type: 'string', description: 'Business logo image URL' }
+                ]
+            },
+            {
+                id: 'customer',
+                name: 'Customer',
+                type: 'core',
+                color: '#e74c3c',
+                description: 'End users who book appointments and purchase services',
+                attributes: [
+                    { name: 'id', type: 'string (UUID)', description: 'Unique identifier' },
+                    { name: 'given_name', type: 'string', description: 'Customer first name' },
+                    { name: 'surname', type: 'string', description: 'Customer last name' },
+                    { name: 'middle_name', type: 'string', description: 'Customer middle name' },
+                    { name: 'prefix', type: 'string', description: 'Name prefix (Dr., Mr., etc.)' },
+                    { name: 'suffix', type: 'string', description: 'Name suffix' },
+                    { name: 'birthdate', type: 'date', description: 'Date of birth' },
+                    { name: 'gender', type: 'string', description: 'Gender identification' },
+                    { name: 'emails', type: 'array', description: 'Email addresses with types' },
+                    { name: 'phones', type: 'array', description: 'Phone numbers with types' },
+                    { name: 'addresses', type: 'array', description: 'Physical addresses' },
+                    { name: 'locale', type: 'string', description: 'Preferred language' },
+                    { name: 'vip', type: 'boolean', description: 'VIP customer status' },
+                    { name: 'tags', type: 'array', description: 'Customer categorization tags' },
+                    { name: 'custom_attributes', type: 'array', description: 'Custom business-specific fields' },
+                    { name: 'newsletter_status', type: 'string', description: 'Email subscription status' },
+                    { name: 'can_sms', type: 'boolean', description: 'SMS communication preference' },
+                    { name: 'is_business', type: 'boolean', description: 'Business vs individual customer' },
+                    { name: 'company', type: 'string', description: 'Company name if business customer' }
+                ]
+            },
+            {
+                id: 'employee',
+                name: 'Employee',
+                type: 'core',
+                color: '#f39c12',
+                description: 'Staff members who provide services and manage operations',
+                attributes: [
+                    { name: 'id', type: 'string (UUID)', description: 'Unique identifier' },
+                    { name: 'given_name', type: 'string', description: 'Employee first name' },
+                    { name: 'surname', type: 'string', description: 'Employee last name' },
+                    { name: 'email', type: 'string', description: 'Work email address' },
+                    { name: 'phone', type: 'string', description: 'Work phone number' },
+                    { name: 'address', type: 'object', description: 'Home address details' },
+                    { name: 'birthday', type: 'date', description: 'Date of birth' },
+                    { name: 'color', type: 'string', description: 'Calendar display color' },
+                    { name: 'weekly_hours', type: 'integer', description: 'Standard work hours per week' },
+                    { name: 'only_login', type: 'boolean', description: 'Login-only vs service provider' },
+                    { name: 'email_confirmed', type: 'boolean', description: 'Email verification status' },
+                    { name: 'external_id', type: 'string', description: 'External system identifier' },
+                    { name: 'image_url', type: 'string', description: 'Profile photo URL' },
+                    { name: 'cello_jwt', type: 'string', description: 'JWT token for system integration' }
+                ]
+            },
+            {
+                id: 'resource',
+                name: 'Resource',
+                type: 'operational',
+                color: '#9b59b6',
+                description: 'Bookable entities (employees, rooms, equipment) for service delivery',
+                attributes: [
+                    { name: 'id', type: 'string (UUID)', description: 'Unique identifier' },
+                    { name: 'name', type: 'string', description: 'Internal resource name' },
+                    { name: 'public_name', type: 'string', description: 'Customer-facing display name' },
+                    { name: 'resource_type', type: 'string', description: 'Type: employee, room, equipment' },
+                    { name: 'color', type: 'string (hex)', description: 'Calendar display color' },
+                    { name: 'position', type: 'integer', description: 'Display order position' },
+                    { name: 'deleted', type: 'boolean', description: 'Soft deletion status' },
+                    { name: 'only_login', type: 'boolean', description: 'Login-only access restriction' },
+                    { name: 'multiple_appointments', type: 'boolean', description: 'Allow concurrent bookings' },
+                    { name: 'all_services', type: 'boolean', description: 'Available for all services' },
+                    { name: 'created_at', type: 'datetime', description: 'Record creation timestamp' },
+                    { name: 'updated_at', type: 'datetime', description: 'Last update timestamp' }
+                ]
+            },
+            {
+                id: 'service',
+                name: 'Service',
+                type: 'service',
+                color: '#1abc9c',
+                description: 'Bookable services offered by the merchant with pricing and workflow',
+                attributes: [
+                    { name: 'id', type: 'string (UUID)', description: 'Unique identifier' },
+                    { name: 'name', type: 'string', description: 'Service name' },
+                    { name: 'description', type: 'text', description: 'Service description and details' },
+                    { name: 'identity', type: 'string (UUID)', description: 'Service template identifier' },
+                    { name: 'duration', type: 'integer', description: 'Service duration in minutes' },
+                    { name: 'cost', type: 'object', description: 'Pricing with amount, currency, taxes' },
+                    { name: 'steps', type: 'array', description: 'Service workflow steps with resources' },
+                    { name: 'active', type: 'boolean', description: 'Service availability status' },
+                    { name: 'visible_to_customers', type: 'boolean', description: 'Public visibility' },
+                    { name: 'show_price', type: 'boolean', description: 'Display pricing to customers' },
+                    { name: 'position', type: 'integer', description: 'Display order within category' },
+                    { name: 'overall_position', type: 'integer', description: 'Global display order' },
+                    { name: 'category_name', type: 'string', description: 'Service category name' },
+                    { name: 'max_capacity', type: 'integer', description: 'Maximum simultaneous bookings' },
+                    { name: 'voucher_requirement', type: 'string', description: 'Required voucher/package' },
+                    { name: 'tax_rate', type: 'decimal', description: 'Applicable tax rate' }
+                ]
+            },
+            {
+                id: 'service_category',
+                name: 'Category',
+                type: 'operational',
+                color: '#9b59b6',
+                description: 'Organizational grouping for services to improve navigation',
+                attributes: [
+                    { name: 'id', type: 'string (UUID)', description: 'Unique identifier' },
+                    { name: 'name', type: 'string', description: 'Category name with emojis/formatting' },
+                    { name: 'position', type: 'integer', description: 'Display order position' },
+                    { name: 'created_at', type: 'datetime', description: 'Record creation timestamp' },
+                    { name: 'updated_at', type: 'datetime', description: 'Last update timestamp' },
+                    { name: 'deleted_at', type: 'datetime', description: 'Soft deletion timestamp' }
+                ]
+            },
+            {
+                id: 'appointment',
+                name: 'Appointment',
+                type: 'booking',
+                color: '#27ae60',
+                description: 'Scheduled service bookings with timing and resource allocation',
+                attributes: [
+                    { name: 'id', type: 'string (UUID)', description: 'Unique identifier' },
+                    { name: 'title', type: 'string', description: 'Custom appointment title' },
+                    { name: 'starts_at', type: 'datetime', description: 'Appointment start time' },
+                    { name: 'ends_at', type: 'datetime', description: 'Appointment end time' },
+                    { name: 'customer_starts_at', type: 'datetime', description: 'Customer arrival time' },
+                    { name: 'state', type: 'string', description: 'Status: confirmed, canceled, completed' },
+                    { name: 'state_changed_by', type: 'string', description: 'Who changed the status' },
+                    { name: 'participant_count', type: 'string', description: 'Number of participants' },
+                    { name: 'booked_via', type: 'string', description: 'Booking source: widget, phone, etc.' },
+                    { name: 'steps', type: 'array', description: 'Service steps with resources and timing' },
+                    { name: 'address', type: 'object', description: 'Service location address' },
+                    { name: 'no_show', type: 'boolean', description: 'Customer no-show status' },
+                    { name: 'origin', type: 'string', description: 'Appointment creation source' },
+                    { name: 'note', type: 'text', description: 'Appointment notes' },
+                    { name: 'price_cents', type: 'integer', description: 'Appointment price in cents' },
+                    { name: 'price_currency', type: 'string', description: 'Price currency' },
+                    { name: 'customer_id', type: 'string (UUID)', description: 'Associated customer' },
+                    { name: 'series_id', type: 'string (UUID)', description: 'Recurring appointment series' }
+                ]
+            },
+            {
+                id: 'order',
+                name: 'Order',
+                type: 'financial',
+                color: '#8e44ad',
+                description: 'Financial transactions for services with itemized billing',
+                attributes: [
+                    { name: 'id', type: 'string (UUID)', description: 'Unique identifier' },
+                    { name: 'gateway', type: 'string', description: 'Payment gateway: shorepos, stripe, etc.' },
+                    { name: 'gateway_id', type: 'string', description: 'External payment system ID' },
+                    { name: 'total', type: 'object', description: 'Total amount with currency' },
+                    { name: 'total_net', type: 'object', description: 'Net amount excluding taxes' },
+                    { name: 'total_items', type: 'object', description: 'Items total before discounts' },
+                    { name: 'total_giftcards', type: 'object', description: 'Gift card redemption amount' },
+                    { name: 'tip_amount', type: 'integer', description: 'Customer tip amount' },
+                    { name: 'tip_tax_rate', type: 'decimal', description: 'Tax rate applied to tips' },
+                    { name: 'status', type: 'string', description: 'Order status: paid, pending, failed' },
+                    { name: 'refund_status', type: 'string', description: 'Refund status: not_refunded, partial, full' },
+                    { name: 'order_items', type: 'array', description: 'Itemized line items with pricing' },
+                    { name: 'used_giftcards', type: 'array', description: 'Applied gift cards' },
+                    { name: 'charged_at', type: 'datetime', description: 'Payment processing timestamp' },
+                    { name: 'initiated_at', type: 'datetime', description: 'Order initiation timestamp' },
+                    { name: 'appointment_id', type: 'string (UUID)', description: 'Related appointment' },
+                    { name: 'customer_id', type: 'string (UUID)', description: 'Customer who placed order' }
+                ]
+            },
+            {
+                id: 'payment',
+                name: 'Payment',
+                type: 'financial',
+                color: '#9b59b6',
+                description: 'Payment transactions through various gateways',
+                attributes: [
+                    { name: 'id', type: 'string (UUID)', description: 'Unique identifier' },
+                    { name: 'gateway_id', type: 'string', description: 'External payment system ID' },
+                    { name: 'paid', type: 'object', description: 'Payment amount with currency' },
+                    { name: 'paid_at', type: 'datetime', description: 'Payment processing timestamp' },
+                    { name: 'status', type: 'string', description: 'Payment status: succeeded, failed, pending' },
+                    { name: 'payment_type', type: 'string', description: 'Method: cash, card, paypal, etc.' },
+                    { name: 'payment_details', type: 'object', description: 'Card details: brand, last4, expiration' },
+                    { name: 'billing_address', type: 'object', description: 'Billing address and contact info' },
+                    { name: 'statement_descriptor', type: 'string', description: 'Bank statement description' },
+                    { name: 'description', type: 'text', description: 'Payment description or memo' },
+                    { name: 'created_at', type: 'datetime', description: 'Record creation timestamp' }
+                ]
+            },
+            {
+                id: 'refund',
+                name: 'Refund',
+                type: 'financial',
+                color: '#c0392b',
+                description: 'Refund transactions for cancelled or modified orders',
+                attributes: [
+                    { name: 'id', type: 'string (UUID)', description: 'Unique identifier' },
+                    { name: 'gateway', type: 'string', description: 'Refund gateway: paypal, stripe, etc.' },
+                    { name: 'gateway_id', type: 'string', description: 'External refund system ID' },
+                    { name: 'refunded', type: 'object', description: 'Refunded amount with currency' },
+                    { name: 'status', type: 'string', description: 'Refund status: succeeded, failed, pending' },
+                    { name: 'reason', type: 'string', description: 'Refund reason code or description' },
+                    { name: 'refunded_at', type: 'datetime', description: 'Refund processing timestamp' }
+                ]
+            },
+            {
+                id: 'feedback',
+                name: 'Feedback',
+                type: 'communication',
+                color: '#f1c40f',
+                description: 'Customer reviews and ratings for completed appointments',
+                attributes: [
+                    { name: 'id', type: 'string (UUID)', description: 'Unique identifier' },
+                    { name: 'positive', type: 'boolean', description: 'Positive or negative feedback sentiment' },
+                    { name: 'comment', type: 'text', description: 'Customer review text' },
+                    { name: 'public', type: 'boolean', description: 'Public visibility permission' },
+                    { name: 'customer_name', type: 'string', description: 'Name to display with review' },
+                    { name: 'given_at', type: 'datetime', description: 'Feedback submission timestamp' }
+                ]
+            },
+            {
+                id: 'newsletter',
+                name: 'Newsletter',
+                type: 'communication',
+                color: '#e67e22',
+                description: 'Email marketing campaigns and customer communications',
+                attributes: [
+                    { name: 'id', type: 'string (UUID)', description: 'Unique identifier' },
+                    { name: 'variables', type: 'object', description: 'Email content: title, subject, content, attachments' },
+                    { name: 'kind', type: 'string', description: 'Communication type: email, sms' },
+                    { name: 'recipients_count', type: 'integer', description: 'Number of recipients' },
+                    { name: 'recipients', type: 'array', description: 'List of recipient customer IDs' },
+                    { name: 'customer_groups', type: 'array', description: 'Target customer segments' },
+                    { name: 'locale', type: 'string', description: 'Content language' },
+                    { name: 'groups', type: 'array', description: 'Campaign categorization' },
+                    { name: 'scheduled_for', type: 'datetime', description: 'Scheduled send time' },
+                    { name: 'released_at', type: 'datetime', description: 'Actual send timestamp' },
+                    { name: 'created_at', type: 'datetime', description: 'Campaign creation timestamp' }
+                ]
+            },
+            {
+                id: 'wait_list_customer',
+                name: 'Wait List',
+                type: 'booking',
+                color: '#95a5a6',
+                description: 'Customers waiting for available appointment slots',
+                attributes: [
+                    { name: 'id', type: 'string (UUID)', description: 'Unique identifier' },
+                    { name: 'customer_id', type: 'string (UUID)', description: 'Customer waiting for service' },
+                    { name: 'period', type: 'string', description: 'Time range availability: start..end format' },
+                    { name: 'number_of_persons', type: 'integer', description: 'Number of people needing service' },
+                    { name: 'created_at', type: 'datetime', description: 'Wait list entry timestamp' },
+                    { name: 'updated_at', type: 'datetime', description: 'Last update timestamp' }
+                ]
+            },
+            {
+                id: 'closing_time',
+                name: 'Closing Time',
+                type: 'operational',
+                color: '#7f8c8d',
+                description: 'Blocked time periods for breaks, holidays, or maintenance',
+                attributes: [
+                    { name: 'id', type: 'string (UUID)', description: 'Unique identifier' },
+                    { name: 'starts_at', type: 'datetime', description: 'Closure start time' },
+                    { name: 'ends_at', type: 'datetime', description: 'Closure end time' },
+                    { name: 'reason', type: 'string', description: 'Closure reason: break, holiday, maintenance' },
+                    { name: 'created_at', type: 'datetime', description: 'Record creation timestamp' },
+                    { name: 'updated_at', type: 'datetime', description: 'Last update timestamp' },
+                    { name: 'deleted_at', type: 'datetime', description: 'Soft deletion timestamp' }
+                ]
+            },
+            {
+                id: 'shift_recurrence',
+                name: 'Shift Schedule',
+                type: 'operational',
+                color: '#34495e',
+                description: 'Recurring work schedules for staff and resources',
+                attributes: [
+                    { name: 'id', type: 'string (UUID)', description: 'Unique identifier' },
+                    { name: 'resource_id', type: 'string (UUID)', description: 'Associated resource/employee' },
+                    { name: 'starts_at', type: 'datetime', description: 'Shift start time' },
+                    { name: 'duration_in_minutes', type: 'integer', description: 'Shift duration' },
+                    { name: 'recurrence_rule', type: 'string', description: 'RRULE format recurrence pattern' },
+                    { name: 'exception_dates', type: 'array', description: 'Dates to skip in recurrence' },
+                    { name: 'merchant_profile_id', type: 'string (UUID)', description: 'Associated merchant profile' },
+                    { name: 'created_at', type: 'datetime', description: 'Record creation timestamp' },
+                    { name: 'updated_at', type: 'datetime', description: 'Last update timestamp' }
+                ]
+            },
+            {
+                id: 'sms_contract',
+                name: 'SMS Contract',
+                type: 'communication',
+                color: '#d35400',
+                description: 'SMS service agreements and billing for notifications',
+                attributes: [
+                    { name: 'id', type: 'string (UUID)', description: 'Unique identifier' },
+                    { name: 'merchant_id', type: 'string (UUID)', description: 'Associated merchant' },
+                    { name: 'sms_limit', type: 'integer', description: 'Monthly SMS limit' },
+                    { name: 'price_per_sms_in_cents', type: 'integer', description: 'Cost per SMS in cents' },
+                    { name: 'starts_at', type: 'date', description: 'Contract start date' },
+                    { name: 'active', type: 'boolean', description: 'Contract active status' },
+                    { name: 'limit_type', type: 'string', description: 'Limit enforcement type: BY_LIMIT' },
+                    { name: 'contract_id', type: 'string', description: 'External contract identifier' },
+                    { name: 'subscription_id', type: 'string', description: 'Payment subscription ID' },
+                    { name: 'created_at', type: 'datetime', description: 'Record creation timestamp' }
+                ]
+            }
+        ];
+
+        // Debug: Check for duplicate IDs
+        console.log('=== DEBUGGING DUPLICATE NODES ===');
+        const entityIds = entities.map(e => e.id);
+        const duplicateIds = entityIds.filter((id, index) => entityIds.indexOf(id) !== index);
+        console.log('Total entities:', entities.length);
+        console.log('Unique entity IDs:', [...new Set(entityIds)].length);
+        console.log('Duplicate IDs found:', duplicateIds);
+
+        // Check service entity specifically
+        const serviceEntities = entities.filter(e => e.id === 'service');
+        console.log('Service entities found:', serviceEntities.length, serviceEntities);
+
+        // Check service-related entities that might be confusing
+        const serviceRelatedEntities = entities.filter(e => e.name.toLowerCase().includes('service'));
+        console.log('Service-related entities:', serviceRelatedEntities.map(e => ({ id: e.id, name: e.name, type: e.type, color: e.color })));
+
+        // Check if any entities have undefined or null IDs
+        const entitiesWithoutId = entities.filter(e => !e.id);
+        console.log('Entities without ID:', entitiesWithoutId.length);
+
+        // Check for entities with same name but different IDs
+        const nameGroups = {};
+        entities.forEach(e => {
+            if (!nameGroups[e.name]) nameGroups[e.name] = [];
+            nameGroups[e.name].push(e.id);
+        });
+        const duplicateNames = Object.entries(nameGroups).filter(([name, ids]) => ids.length > 1);
+        console.log('Entities with duplicate names:', duplicateNames);
+        console.log('===================================');
+
+        const relationships = [
+            { source: 'organization', target: 'merchant', type: 'manages' },
+            { source: 'organization', target: 'employee', type: 'employs' },
+            { source: 'organization', target: 'customer', type: 'serves' },
+            { source: 'merchant', target: 'customer', type: 'serves' },
+            { source: 'merchant', target: 'employee', type: 'employs' },
+            { source: 'merchant', target: 'service', type: 'offers' },
+            { source: 'merchant', target: 'resource', type: 'owns' },
+            { source: 'merchant', target: 'appointment', type: 'schedules' },
+            { source: 'merchant', target: 'order', type: 'processes' },
+            { source: 'merchant', target: 'payment', type: 'receives' },
+            { source: 'merchant', target: 'refund', type: 'processes' },
+            { source: 'merchant', target: 'feedback', type: 'receives' },
+            { source: 'merchant', target: 'newsletter', type: 'sends' },
+            { source: 'merchant', target: 'service_category', type: 'organizes' },
+            { source: 'merchant', target: 'closing_time', type: 'defines' },
+            { source: 'merchant', target: 'shift_recurrence', type: 'schedules' },
+            { source: 'merchant', target: 'sms_contract', type: 'maintains' },
+            { source: 'merchant', target: 'wait_list_customer', type: 'manages' },
+            { source: 'customer', target: 'appointment', type: 'books' },
+            { source: 'customer', target: 'order', type: 'places' },
+            { source: 'customer', target: 'feedback', type: 'provides' },
+            { source: 'customer', target: 'newsletter', type: 'receives' },
+            { source: 'customer', target: 'wait_list_customer', type: 'joins' },
+            { source: 'service', target: 'appointment', type: 'scheduled_in' },
+            { source: 'service', target: 'service_category', type: 'belongs_to' },
+            { source: 'service', target: 'resource', type: 'requires' },
+            { source: 'service', target: 'wait_list_customer', type: 'requested_for' },
+            { source: 'resource', target: 'appointment', type: 'assigned_to' },
+            { source: 'resource', target: 'shift_recurrence', type: 'scheduled_for' },
+            { source: 'resource', target: 'employee', type: 'represents' },
+            { source: 'appointment', target: 'order', type: 'generates' },
+            { source: 'appointment', target: 'feedback', type: 'receives' },
+            { source: 'order', target: 'payment', type: 'settled_by' },
+            { source: 'order', target: 'refund', type: 'may_have' }
+        ];
+
+        // Color mapping for entity types
+        const typeColors = {
+            'root': '#2c3e50',
+            'core': '#3498db',
+            'service': '#1abc9c',
+            'booking': '#27ae60',
+            'financial': '#8e44ad',
+            'operational': '#95a5a6',
+            'communication': '#e67e22'
+        };
+
+        // Setup SVG
+        const svg = d3.select('#visualization');
+        const width = 1200;
+        const height = 700;
+        svg.attr('width', width).attr('height', height);
+
+        // Create force simulation
+        const simulation = d3.forceSimulation(entities)
+            .force('link', d3.forceLink(relationships).id(d => d.id).distance(200))
+            .force('charge', d3.forceManyBody().strength(-400))
+            .force('center', d3.forceCenter(width / 2, height / 2))
+            .force('collision', d3.forceCollide().radius(d => {
+                const radius = d.type === 'root' ? 50 : d.type === 'core' ? 40 : 30;
+                return radius + 10; // Add 10px padding
+            }));
+
+        // Create links
+        const link = svg.append('g')
+            .selectAll('line')
+            .data(relationships)
+            .enter().append('line')
+            .attr('class', 'link');
+
+        // Create nodes
+        console.log('Creating nodes from entities:', entities.length);
+        const node = svg.append('g')
+            .selectAll('g')
+            .data(entities, d => d.id) // Add key function for stable data binding
+            .enter().append('g')
+            .attr('class', 'node')
+            .attr('data-entity-id', d => d.id) // Add data attribute for debugging
+            .call(d3.drag()
+                .on('start', dragstarted)
+                .on('drag', dragged)
+                .on('end', dragended));
+
+        console.log('Nodes created:', node.size());
+        console.log('Node data check:', node.data().map(d => ({ id: d.id, name: d.name })));
+
+        // Add circles to nodes
+        node.append('circle')
+            .attr('class', 'node-circle')
+            .attr('r', d => d.type === 'root' ? 50 : d.type === 'core' ? 43 : 35)
+            .attr('fill', d => d.color)
+            .attr('stroke', d => d.id === 'service_category' ? '#8e44ad' : '#333')
+            .attr('stroke-width', d => d.id === 'service_category' ? 3 : 2)
+            .attr('stroke-dasharray', d => d.id === 'service_category' ? '5,5' : 'none');
+
+        // Add text to nodes
+        node.append('text')
+            .attr('class', 'node-text')
+            .attr('dy', '0.35em')
+            .text(d => {
+                if (d.name.length > 12) {
+                    const words = d.name.split(' ');
+                    return words.length > 1 ? words[0] : d.name.substring(0, 10) + '...';
+                }
+                return d.name;
+            })
+            .style('font-size', d => d.type === 'root' ? '12px' : d.type === 'core' ? '11px' : '10px');
+
+        // Tooltip functionality
+        const tooltip = d3.select('#tooltip');
+
+        node.on('mouseover', function (event, d) {
+            tooltip.style('opacity', 1)
+                .html(`<h3>${d.name}</h3><p>${d.description}</p><p><strong>Type:</strong> ${d.type}</p>`)
+                .style('left', (event.pageX + 10) + 'px')
+                .style('top', (event.pageY - 10) + 'px');
+
+            // Highlight connected nodes and links
+            highlightConnections(d.id);
+        });
+
+        node.on('mouseout', function () {
+            tooltip.style('opacity', 0);
+            resetHighlight();
+        });
+
+        // Click event to show detailed entity information
+        node.on('click', function (event, d) {
+            event.stopPropagation();
+            showEntityModal(d);
+        });
+
+        // Update positions on simulation tick
+        simulation.on('tick', () => {
+            link
+                .attr('x1', d => d.source.x)
+                .attr('y1', d => d.source.y)
+                .attr('x2', d => d.target.x)
+                .attr('y2', d => d.target.y);
+
+            node.attr('transform', d => `translate(${d.x},${d.y})`);
+        });
+
+        // Debug: Log final positions after simulation stabilizes
+        const checkPositions = () => {
+            const nodePositions = entities.map(d => ({
+                id: d.id,
+                name: d.name,
+                x: Math.round(d.x || 0),
+                y: Math.round(d.y || 0)
+            }));
+            console.log('Node positions after simulation:', nodePositions);
+
+            // Check for overlapping positions
+            const positionMap = {};
+            nodePositions.forEach(node => {
+                const key = `${node.x},${node.y}`;
+                if (!positionMap[key]) positionMap[key] = [];
+                positionMap[key].push(node);
+            });
+            const overlapping = Object.entries(positionMap).filter(([pos, nodes]) => nodes.length > 1);
+            if (overlapping.length > 0) {
+                console.log('OVERLAPPING NODES DETECTED:', overlapping);
+            }
+
+            // Count actual DOM nodes vs data
+            const domNodes = document.querySelectorAll('.node');
+            const domCircles = document.querySelectorAll('.node-circle');
+            const domTexts = document.querySelectorAll('.node-text');
+            console.log('DOM node count:', {
+                nodes: domNodes.length,
+                circles: domCircles.length,
+                texts: domTexts.length,
+                dataEntities: entities.length
+            });
+
+            // Check for service nodes specifically
+            const serviceNodes = Array.from(domNodes).filter(node =>
+                node.getAttribute('data-entity-id') === 'service'
+            );
+            console.log('Service DOM nodes found:', serviceNodes.length, serviceNodes);
+        };
+
+        simulation.on('end', checkPositions);
+
+        // Drag functions
+        function dragstarted(event, d) {
+            if (!event.active) simulation.alphaTarget(0.3).restart();
+            d.fx = d.x;
+            d.fy = d.y;
+        }
+
+        function dragged(event, d) {
+            d.fx = event.x;
+            d.fy = event.y;
+        }
+
+        function dragended(event, d) {
+            if (!event.active) simulation.alphaTarget(0);
+            d.fx = null;
+            d.fy = null;
+        }
+
+        // Highlight functions
+        function highlightConnections(nodeId) {
+            const connectedNodes = new Set([nodeId]);
+            const connectedLinks = new Set();
+
+            relationships.forEach(link => {
+                if (link.source.id === nodeId) {
+                    connectedNodes.add(link.target.id);
+                    connectedLinks.add(link);
+                } else if (link.target.id === nodeId) {
+                    connectedNodes.add(link.source.id);
+                    connectedLinks.add(link);
+                }
+            });
+
+            node.classed('highlighted', d => connectedNodes.has(d.id));
+            link.classed('highlighted', d => connectedLinks.has(d));
+        }
+
+        function resetHighlight() {
+            node.classed('highlighted', false);
+            link.classed('highlighted', false);
+        }
+
+        // Filter functions
+        function showCoreEntities() {
+            const coreTypes = ['root', 'core'];
+            filterEntities(coreTypes);
+        }
+
+        function showFinancialFlow() {
+            const financialEntities = ['customer', 'appointment', 'order', 'payment', 'refund'];
+            filterSpecificEntities(financialEntities);
+        }
+
+        function showBookingFlow() {
+            const bookingEntities = ['customer', 'service', 'resource', 'appointment', 'wait_list_customer'];
+            filterSpecificEntities(bookingEntities);
+        }
+
+        function filterEntities(types) {
+            node.style('opacity', d => types.includes(d.type) ? 1 : 0.2);
+            link.style('opacity', d =>
+                types.includes(d.source.type) && types.includes(d.target.type) ? 1 : 0.1
+            );
+        }
+
+        function filterSpecificEntities(entityIds) {
+            node.style('opacity', d => entityIds.includes(d.id) ? 1 : 0.2);
+            link.style('opacity', d =>
+                entityIds.includes(d.source.id) && entityIds.includes(d.target.id) ? 1 : 0.1
+            );
+        }
+
+        function resetFilter() {
+            node.style('opacity', 1);
+            link.style('opacity', 1);
+        }
+
+        // Button event listeners
+        document.getElementById('resetBtn').addEventListener('click', resetFilter);
+        document.getElementById('coreBtn').addEventListener('click', showCoreEntities);
+        document.getElementById('financialBtn').addEventListener('click', showFinancialFlow);
+        document.getElementById('bookingBtn').addEventListener('click', showBookingFlow);
+
+        // View toggle functionality
+        document.getElementById('graphViewBtn').addEventListener('click', function () {
+            showGraphView();
+        });
+
+        document.getElementById('tableViewBtn').addEventListener('click', function () {
+            showTableView();
+        });
+
+        function showGraphView() {
+            document.getElementById('graph-view').style.display = 'flex';
+            document.getElementById('graph-view').style.flexDirection = 'column';
+            document.getElementById('table-view').style.display = 'none';
+            document.getElementById('graphViewBtn').classList.add('active');
+            document.getElementById('tableViewBtn').classList.remove('active');
+        }
+
+        function showTableView() {
+            document.getElementById('graph-view').style.display = 'none';
+            document.getElementById('table-view').style.display = 'block';
+            document.getElementById('graphViewBtn').classList.remove('active');
+            document.getElementById('tableViewBtn').classList.add('active');
+            populateTables();
+        }
+
+        // Populate table views
+        function populateTables() {
+            populateEntityTable();
+            populateRelationshipTable();
+        }
+
+        function populateEntityTable() {
+            const tbody = document.getElementById('entityTableBody');
+            tbody.innerHTML = '';
+
+            entities.forEach(entity => {
+                const row = tbody.insertRow();
+
+                // Entity name
+                const nameCell = row.insertCell();
+                nameCell.textContent = entity.name;
+                nameCell.style.fontWeight = '600';
+
+                // Entity type
+                const typeCell = row.insertCell();
+                const typeBadge = document.createElement('span');
+                typeBadge.className = 'entity-type-badge';
+                typeBadge.textContent = entity.type.charAt(0).toUpperCase() + entity.type.slice(1);
+                typeBadge.style.backgroundColor = typeColors[entity.type];
+                typeCell.appendChild(typeBadge);
+
+                // Description
+                const descCell = row.insertCell();
+                descCell.textContent = entity.description;
+                descCell.style.maxWidth = '300px';
+
+                // Key relationships
+                const relCell = row.insertCell();
+                const entityRelationships = relationships.filter(rel =>
+                    rel.source === entity.id || rel.target === entity.id
+                );
+                relCell.textContent = `${entityRelationships.length} connections`;
+                relCell.style.color = '#7f8c8d';
+
+                // Make row clickable
+                row.style.cursor = 'pointer';
+                row.addEventListener('click', () => {
+                    showEntityModal(entity);
+                });
+
+                // Add hover effect
+                row.addEventListener('mouseenter', () => {
+                    row.style.backgroundColor = '#e3f2fd';
+                });
+                row.addEventListener('mouseleave', () => {
+                    row.style.backgroundColor = '';
+                });
+            });
+        }
+
+        function populateRelationshipTable() {
+            const tbody = document.getElementById('relationshipTableBody');
+            tbody.innerHTML = '';
+
+            // Add business context mapping
+            const businessContext = {
+                'manages': 'Organizational hierarchy and control',
+                'employs': 'Employment and staff management',
+                'serves': 'Customer service relationship',
+                'offers': 'Service catalog management',
+                'owns': 'Resource ownership and allocation',
+                'schedules': 'Time and resource scheduling',
+                'processes': 'Transaction and business process handling',
+                'receives': 'Information and payment collection',
+                'sends': 'Communication and outreach',
+                'organizes': 'Categorization and structure',
+                'defines': 'Business rules and constraints',
+                'maintains': 'Service agreements and contracts',
+                'books': 'Reservation and booking system',
+                'places': 'Order and transaction initiation',
+                'provides': 'Feedback and review system',
+                'joins': 'Waitlist and queue management',
+                'scheduled_in': 'Service delivery planning',
+                'belongs_to': 'Hierarchical categorization',
+                'requires': 'Resource dependency',
+                'requested_for': 'Demand and availability matching',
+                'assigned_to': 'Resource allocation',
+                'scheduled_for': 'Work schedule management',
+                'represents': 'Abstract representation',
+                'generates': 'Business process flow',
+                'settled_by': 'Payment processing',
+                'may_have': 'Optional business scenarios'
+            };
+
+            relationships.forEach(rel => {
+                const row = tbody.insertRow();
+
+                // Source entity
+                const sourceCell = row.insertCell();
+                const sourceEntity = entities.find(e => e.id === rel.source);
+                sourceCell.textContent = sourceEntity.name;
+                sourceCell.style.fontWeight = '600';
+                sourceCell.style.color = sourceEntity.color;
+
+                // Relationship type
+                const typeCell = row.insertCell();
+                typeCell.textContent = rel.type.replace('_', ' ');
+                typeCell.style.fontStyle = 'italic';
+                typeCell.style.color = '#7f8c8d';
+
+                // Target entity
+                const targetCell = row.insertCell();
+                const targetEntity = entities.find(e => e.id === rel.target);
+                targetCell.textContent = targetEntity.name;
+                targetCell.style.fontWeight = '600';
+                targetCell.style.color = targetEntity.color;
+
+                // Business context
+                const contextCell = row.insertCell();
+                contextCell.textContent = businessContext[rel.type] || 'Business relationship';
+                contextCell.style.fontSize = '14px';
+                contextCell.style.color = '#555';
+            });
+        }
+
+        // Modal functions
+        function showEntityModal(entity) {
+            const modal = document.getElementById('entityDetailModal');
+            const content = document.getElementById('modalEntityContent');
+
+            // Build the modal content
+            let html = `
+                <h2 style="color: ${entity.color}; margin-top: 0;">
+                    <span style="display: inline-block; width: 20px; height: 20px; background: ${entity.color}; border-radius: 50%; margin-right: 10px;"></span>
+                    ${entity.name}
+                </h2>
+                <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
+                    <h4 style="margin: 0 0 10px 0; color: #2c3e50;">Description</h4>
+                    <p style="margin: 0; color: #555;">${entity.description}</p>
+                    <p style="margin: 10px 0 0 0; color: #7f8c8d; font-style: italic;">
+                        Type: ${entity.type.charAt(0).toUpperCase() + entity.type.slice(1)}
+                    </p>
+                </div>
+                
+                <h3 style="color: #2c3e50; margin: 20px 0 15px 0;">📋 Entity Attributes</h3>
+                <div style="background: #ecf0f1; padding: 10px; border-radius: 6px; margin-bottom: 15px;">
+                    <small style="color: #7f8c8d;">
+                        <strong>${entity.attributes ? entity.attributes.length : 0}</strong> attributes • 
+                        <strong>${relationships.filter(rel => rel.source === entity.id || rel.target === entity.id).length}</strong> relationships
+                    </small>
+                </div>
+                <div class="attribute-grid">
+            `;
+
+            // Add attributes
+            if (entity.attributes && entity.attributes.length > 0) {
+                entity.attributes.forEach(attr => {
+                    // Determine attribute category for better organization
+                    let borderColor = '#3498db';
+                    if (attr.name === 'id') borderColor = '#e74c3c';
+                    else if (attr.name.includes('_at') || attr.name.includes('date')) borderColor = '#f39c12';
+                    else if (attr.type.includes('boolean')) borderColor = '#27ae60';
+                    else if (attr.type.includes('object') || attr.type.includes('array')) borderColor = '#9b59b6';
+
+                    html += `
+                        <div class="attribute-card" style="border-left-color: ${borderColor};">
+                            <h4 style="color: #2c3e50; margin: 0 0 8px 0;">
+                                <span class="attribute-name">${attr.name}</span>
+                                <span class="attribute-type-badge">${attr.type}</span>
+                            </h4>
+                            <p style="margin: 0; font-size: 13px; color: #555; line-height: 1.4;">${attr.description}</p>
+                        </div>
+                    `;
+                });
+            } else {
+                html += '<p style="color: #7f8c8d; font-style: italic;">No attributes defined for this entity.</p>';
+            }
+
+            html += '</div>';
+
+            // Add relationships section
+            const entityRelationships = relationships.filter(rel =>
+                rel.source === entity.id || rel.target === entity.id
+            );
+
+            if (entityRelationships.length > 0) {
+                html += `
+                    <h3 style="color: #2c3e50; margin: 25px 0 15px 0;">🔗 Entity Relationships</h3>
+                    <div style="background: #f8f9fa; padding: 15px; border-radius: 8px;">
+                `;
+
+                entityRelationships.forEach(rel => {
+                    const isSource = rel.source === entity.id;
+                    const relatedEntity = entities.find(e => e.id === (isSource ? rel.target : rel.source));
+                    const direction = isSource ? '→' : '←';
+
+                    html += `
+                        <div style="margin: 8px 0; padding: 8px; background: white; border-radius: 4px; border-left: 3px solid ${relatedEntity.color};">
+                            <strong>${isSource ? entity.name : relatedEntity.name}</strong>
+                            <span style="color: #7f8c8d; margin: 0 8px;">${direction} ${rel.type.replace('_', ' ')}</span>
+                            <strong>${isSource ? relatedEntity.name : entity.name}</strong>
+                        </div>
+                    `;
+                });
+
+                html += '</div>';
+            }
+
+            content.innerHTML = html;
+            modal.style.display = 'flex';
+        }
+
+        function closeEntityModal() {
+            const modal = document.getElementById('entityDetailModal');
+            modal.style.display = 'none';
+        }
+
+        // Close modal when clicking outside of it
+        document.getElementById('entityDetailModal').addEventListener('click', function (e) {
+            if (e.target === this) {
+                closeEntityModal();
+            }
+        });
+
+        // Close modal with Escape key
+        document.addEventListener('keydown', function (e) {
+            if (e.key === 'Escape') {
+                closeEntityModal();
+            }
+        });
+
+        // Create legend
+        function createLegend() {
+            const legend = d3.select('#legend');
+            const typeGroups = d3.group(entities, d => d.type);
+
+            typeGroups.forEach((entities, type) => {
+                const item = legend.append('div').attr('class', 'legend-item');
+                item.append('div')
+                    .attr('class', 'legend-color')
+                    .style('background-color', typeColors[type]);
+                item.append('span')
+                    .text(`${type.charAt(0).toUpperCase() + type.slice(1)} (${entities.length})`);
+            });
+        }
+
+        createLegend();
+    </script>
+</body>
+
+</html>
